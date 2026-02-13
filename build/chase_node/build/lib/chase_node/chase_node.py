@@ -55,11 +55,11 @@ class chase_node_class(Node):
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
         self.free_robot_list = []
-        self.ongoing_task_dic = {} #{'task_id':'robot_name',task_id':'robot_name',task_id':'robot_name'...}
-        self.pending_task_list = [] #[msg,msg,msg....]
+        self.ongoing_task_dic = {} #{'task_id':{'robot_name','goal_place'},'task_id':{'robot_name','goal_place'}...}
+        # self.pending_task_list = [] #[msg,msg,msg....]
         self.cancelling_task_dic = {} #{'task_id':'cancel_request_id',task_id':'cancel_request_id',task_id':'cancel_request_id'...}
 
-        with open('/home/user/rmf_wakayama-u-farm-123/0.yaml', 'r') as file:
+        with open('/home/user/rmf_wakayama-u-farm-123/0.yaml', 'r') as file: #openrmf nav graph yaml file path
             nav_graph_data = yaml.safe_load(file)
 
         self.vertices_dict = {vertex[2]['name']: [vertex[0], vertex[1]] for vertex in nav_graph_data['levels']['wakayama-u']['vertices']}
@@ -72,28 +72,45 @@ class chase_node_class(Node):
     def fleet_state_callback(self, msg):
         for item in msg.robots:
             exists = any(item.name == obj.name for obj in self.free_robot_list)
-            if item.task_id == '':
-                if not exists: 
+            if len(self.ongoing_task_dic) != 0: 
+                robot_position = np.array([item.location.x,item.location.y])
+                goal_position = np.array(self.vertices_dict[self.ongoing_task_dic[list(self.ongoing_task_dic.keys())[0]]['goal_place']])
+                distance = np.linalg.norm(robot_position - goal_position)
+
+                if distance < 0.5: # consider as task complete when close enough to goal, remove from ongoing task list
+                    if not exists:
+                        self.free_robot_list.append(item)
+                        task_id_to_delete = [task_id for task_id, task_info in self.ongoing_task_dic.items() if task_info['robot_name'] == item.name]
+                        del self.ongoing_task_dic[task_id_to_delete[0]]
+                else: # still on going task, should be removed in free robot list
+                    if exists:
+                        self.free_robot_list = list(filter(lambda obj: obj.name != item.name, self.free_robot_list))   
+            else: # no ongoing task, any robot should be in free robot list
+                if not exists: # new robot available, add to free robot list
                     self.free_robot_list.append(item)
-                    if len(self.ongoing_task_dic) != 0:
-                        task_id_to_delete = [task_id for task_id, robot_name in self.ongoing_task_dic.items() if robot_name == item.name]
-                        del self.ongoing_task_dic[task_id_to_delete[-1]]
-            else:
-                if exists:
-                    self.free_robot_list = list(filter(lambda obj: obj.name != item.name, self.free_robot_list))
+
+            # if item.task_id == '': # dont have ongoing task, should be in free robot list
+            #     if not exists: # new robot available, add to free robot list
+            #         self.free_robot_list.append(item)
+            #         if len(self.ongoing_task_dic) != 0: # remove ajacent ongoing task
+            #             task_id_to_delete = [task_id for task_id, task_info in self.ongoing_task_dic.items() if task_info['robot_name'] == item.name]
+            #             del self.ongoing_task_dic[task_id_to_delete[-1]]
+            # else: 
+            #     if exists:  # have ongoing task, should be removed in free robot list
+            #         self.free_robot_list = list(filter(lambda obj: obj.name != item.name, self.free_robot_list))
 
     def get_target_callback(self, msg):
         self.target_position = [msg.pose.position.x, msg.pose.position.y]
         self.get_logger().info('target: ' + str(self.target_position))
 
     def timer_callback(self):
-        self.get_logger().info('free list: ')
+        self.get_logger().info('free list: ') # print status
         for item in self.free_robot_list:
             self.get_logger().info(item.name)
         self.get_logger().info(' ')
         self.get_logger().info('on goning task: ')
         if len(self.ongoing_task_dic) != 0:
-            for task, robot in self.ongoing_task_dic.items():
+            for task, task_info in self.ongoing_task_dic.items():
                 self.get_logger().info(f"{task}")
         self.get_logger().info(' ')
         self.get_logger().info('on cancelling task: ')
@@ -102,18 +119,18 @@ class chase_node_class(Node):
                 self.get_logger().info(f"{task}")
         self.get_logger().info('----------------------------------')
 
-        if self.target_position != None:
+        if self.target_position != None: # async process chasing target
             if len(self.ongoing_task_dic) == 0:
                 self.get_logger().info('get it!')
 
-                names = list(self.vertices_dict.keys())
+                names = list(self.vertices_dict.keys()) #find closest two waypoints to target
                 coordinates = np.array(list(self.vertices_dict.values()))
                 squared_distances = np.sum((coordinates - np.array(self.target_position)) ** 2, axis=1)
-                min_index = np.argmin(squared_distances)
+                # min_index = np.argmin(squared_distances)
                 sorted_indices = np.argsort(squared_distances)
 
-                closest_robot = [None,None]
-                for i in range(0,2): #only cloest two waypoint
+                closest_robot = [None,None] #find closest robots to the waypoints
+                for i in range(0,2): #only closest two waypoints
                     goal_position = np.array(list(self.vertices_dict[names[sorted_indices[i]]]))
 
                     min_distance = float('inf')
@@ -139,14 +156,13 @@ class chase_node_class(Node):
                     self.get_logger().info("cancel on going task\n")
                     for task_id, robot_name in self.ongoing_task_dic.items():
                         self.cancel_task_requester(task_id)
-
 #-----------------------------------------------------------------------------------#
     def chase_task_requester(self, robot, fleet, starttime, places, rounds):
         # enable ros sim time
-        if self.use_sim_time:
-            self.get_logger().info("Using Sim Time")
-            param = Parameter("use_sim_time", Parameter.Type.BOOL, True)
-            self.set_parameters([param])
+        # if self.use_sim_time:
+        #     self.get_logger().info("Using Sim Time")
+        #     param = Parameter("use_sim_time", Parameter.Type.BOOL, True)
+        #     self.set_parameters([param])
 
         # Construct task
         msg = ApiRequest()
@@ -211,7 +227,10 @@ class chase_node_class(Node):
         print(f'Got response:\n{response_msg}')
         if self.first_task_sent: #to prevent unwanted msg
             if "patrol_chase" in response_msg.request_id:
-                self.ongoing_task_dic[response_msg.request_id] = json.loads(response_msg.json_msg).get('state').get('assigned_to').get('name')
+                self.ongoing_task_dic[response_msg.request_id] = {
+                    'robot_name' : json.loads(response_msg.json_msg).get('state').get('assigned_to').get('name'),
+                    'goal_place' : json.loads(response_msg.json_msg).get('state').get('detail').get('places')[-1]
+                }
                 print("assign task complete\n")
             if "cancel_task" in response_msg.request_id:
                 task_id_to_delete = [task_id for task_id, cancel_request_id in self.cancelling_task_dic.items() if cancel_request_id == response_msg.request_id]
