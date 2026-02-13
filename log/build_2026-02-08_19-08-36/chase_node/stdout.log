@@ -1,0 +1,35 @@
+running egg_info
+creating ../../build/chase_node/chase_node.egg-info
+writing ../../build/chase_node/chase_node.egg-info/PKG-INFO
+writing dependency_links to ../../build/chase_node/chase_node.egg-info/dependency_links.txt
+writing entry points to ../../build/chase_node/chase_node.egg-info/entry_points.txt
+writing requirements to ../../build/chase_node/chase_node.egg-info/requires.txt
+writing top-level names to ../../build/chase_node/chase_node.egg-info/top_level.txt
+writing manifest file '../../build/chase_node/chase_node.egg-info/SOURCES.txt'
+reading manifest file '../../build/chase_node/chase_node.egg-info/SOURCES.txt'
+writing manifest file '../../build/chase_node/chase_node.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/user/chase_ws/build/chase_node/build
+creating /home/user/chase_ws/build/chase_node/build/lib
+creating /home/user/chase_ws/build/chase_node/build/lib/chase_node
+copying chase_node/chase_node.py -> /home/user/chase_ws/build/chase_node/build/lib/chase_node
+copying chase_node/__init__.py -> /home/user/chase_ws/build/chase_node/build/lib/chase_node
+running install
+running install_lib
+creating /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node
+copying /home/user/chase_ws/build/chase_node/build/lib/chase_node/chase_node.py -> /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node
+copying /home/user/chase_ws/build/chase_node/build/lib/chase_node/__init__.py -> /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node
+byte-compiling /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node/chase_node.py to chase_node.cpython-310.pyc
+byte-compiling /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node/__init__.py to __init__.cpython-310.pyc
+running install_data
+creating /home/user/chase_ws/install/chase_node/share/ament_index
+creating /home/user/chase_ws/install/chase_node/share/ament_index/resource_index
+creating /home/user/chase_ws/install/chase_node/share/ament_index/resource_index/packages
+copying resource/chase_node -> /home/user/chase_ws/install/chase_node/share/ament_index/resource_index/packages
+copying package.xml -> /home/user/chase_ws/install/chase_node/share/chase_node
+running install_egg_info
+Copying ../../build/chase_node/chase_node.egg-info to /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node-0.0.0-py3.10.egg-info
+running install_scripts
+Installing chase_node script to /home/user/chase_ws/install/chase_node/lib/chase_node
+writing list of installed files to '/home/user/chase_ws/build/chase_node/install.log'

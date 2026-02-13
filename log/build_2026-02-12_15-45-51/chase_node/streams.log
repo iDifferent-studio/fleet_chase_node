@@ -1,0 +1,24 @@
+[1.867s] Invoking command in '/home/user/chase_ws/src/chase_node': PYTHONPATH=/home/user/chase_ws/build/chase_node/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/user/chase_ws/install/chase_node/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/chase_node build --build-base /home/user/chase_ws/build/chase_node/build install --record /home/user/chase_ws/build/chase_node/install.log --single-version-externally-managed install_data
+[2.565s] running egg_info
+[2.567s] writing ../../build/chase_node/chase_node.egg-info/PKG-INFO
+[2.568s] writing dependency_links to ../../build/chase_node/chase_node.egg-info/dependency_links.txt
+[2.568s] writing entry points to ../../build/chase_node/chase_node.egg-info/entry_points.txt
+[2.568s] writing requirements to ../../build/chase_node/chase_node.egg-info/requires.txt
+[2.568s] writing top-level names to ../../build/chase_node/chase_node.egg-info/top_level.txt
+[2.576s] reading manifest file '../../build/chase_node/chase_node.egg-info/SOURCES.txt'
+[2.578s] writing manifest file '../../build/chase_node/chase_node.egg-info/SOURCES.txt'
+[2.578s] running build
+[2.578s] running build_py
+[2.578s] copying chase_node/chase_node.py -> /home/user/chase_ws/build/chase_node/build/lib/chase_node
+[2.579s] running install
+[2.580s] running install_lib
+[2.581s] copying /home/user/chase_ws/build/chase_node/build/lib/chase_node/chase_node.py -> /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node
+[2.583s] byte-compiling /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node/chase_node.py to chase_node.cpython-310.pyc
+[2.588s] running install_data
+[2.588s] running install_egg_info
+[2.592s] removing '/home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node-0.0.0-py3.10.egg-info' (and everything under it)
+[2.594s] Copying ../../build/chase_node/chase_node.egg-info to /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node-0.0.0-py3.10.egg-info
+[2.597s] running install_scripts
+[2.652s] Installing chase_node script to /home/user/chase_ws/install/chase_node/lib/chase_node
+[2.653s] writing list of installed files to '/home/user/chase_ws/build/chase_node/install.log'
+[2.715s] Invoked command in '/home/user/chase_ws/src/chase_node' returned '0': PYTHONPATH=/home/user/chase_ws/build/chase_node/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/user/chase_ws/install/chase_node/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/chase_node build --build-base /home/user/chase_ws/build/chase_node/build install --record /home/user/chase_ws/build/chase_node/install.log --single-version-externally-managed install_data

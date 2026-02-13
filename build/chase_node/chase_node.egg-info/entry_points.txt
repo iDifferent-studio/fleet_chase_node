@@ -1,0 +1,3 @@
+[console_scripts]
+chase_node = chase_node.chase_node:main
+
