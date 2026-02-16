@@ -26,6 +26,8 @@ class chase_node_class(Node):
 
         self.use_sim_time = True
 
+        self.goal_threshold = 0.8 # distance threshold to consider a task complete, can be adjusted based on the map scale
+
         self.transient_qos = QoSProfile(
             history=History.KEEP_LAST,
             depth=1,
@@ -74,30 +76,29 @@ class chase_node_class(Node):
             exists = any(item.name == obj.name for obj in self.free_robot_list)
             if len(self.ongoing_task_dic) != 0: 
                 robot_position = np.array([item.location.x,item.location.y])
-                goal_position = np.array(self.vertices_dict[self.ongoing_task_dic[list(self.ongoing_task_dic.keys())[0]]['goal_place']])
+
+                current_task_id = next((task_id for task_id, task_info in self.ongoing_task_dic.items() 
+                        if task_info['robot_name'] == item.name), None)
+
+                if current_task_id == None:
+                    return
+
+                goal_position = np.array(self.vertices_dict[self.ongoing_task_dic[current_task_id]['goal_place']])
                 distance = np.linalg.norm(robot_position - goal_position)
 
-                if distance < 0.5: # consider as task complete when close enough to goal, remove from ongoing task list
+                if distance < self.goal_threshold: # consider as task complete when close enough to goal, remove from ongoing task list
                     if not exists:
                         self.free_robot_list.append(item)
-                        task_id_to_delete = [task_id for task_id, task_info in self.ongoing_task_dic.items() if task_info['robot_name'] == item.name]
-                        del self.ongoing_task_dic[task_id_to_delete[0]]
+                    task_id_to_delete = [task_id for task_id, task_info in self.ongoing_task_dic.items() if task_info['robot_name'] == item.name]
+                    del self.ongoing_task_dic[task_id_to_delete[0]]
+                    self.get_logger().info(f"task {task_id_to_delete[0]} complete, robot {item.name} is now free\n")
                 else: # still on going task, should be removed in free robot list
                     if exists:
                         self.free_robot_list = list(filter(lambda obj: obj.name != item.name, self.free_robot_list))   
+                        self.get_logger().info(f"robot {item.name} is on going task {current_task_id}\n")
             else: # no ongoing task, any robot should be in free robot list
                 if not exists: # new robot available, add to free robot list
                     self.free_robot_list.append(item)
-
-            # if item.task_id == '': # dont have ongoing task, should be in free robot list
-            #     if not exists: # new robot available, add to free robot list
-            #         self.free_robot_list.append(item)
-            #         if len(self.ongoing_task_dic) != 0: # remove ajacent ongoing task
-            #             task_id_to_delete = [task_id for task_id, task_info in self.ongoing_task_dic.items() if task_info['robot_name'] == item.name]
-            #             del self.ongoing_task_dic[task_id_to_delete[-1]]
-            # else: 
-            #     if exists:  # have ongoing task, should be removed in free robot list
-            #         self.free_robot_list = list(filter(lambda obj: obj.name != item.name, self.free_robot_list))
 
     def get_target_callback(self, msg):
         self.target_position = [msg.pose.position.x, msg.pose.position.y]
@@ -111,7 +112,7 @@ class chase_node_class(Node):
         self.get_logger().info('on goning task: ')
         if len(self.ongoing_task_dic) != 0:
             for task, task_info in self.ongoing_task_dic.items():
-                self.get_logger().info(f"{task}")
+                self.get_logger().info(f"{task}, goal: {task_info['goal_place']}, robot: {task_info['robot_name']}")
         self.get_logger().info(' ')
         self.get_logger().info('on cancelling task: ')
         if len(self.cancelling_task_dic) != 0:
