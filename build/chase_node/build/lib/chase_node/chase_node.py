@@ -18,6 +18,10 @@ from rmf_fleet_msgs.msg import FleetState
 
 import random
 from geometry_msgs.msg import PoseStamped
+
+from shapely.geometry import Polygon, Point
+from transitions import Machine
+
 ###############################################################################
 
 class chase_node_class(Node):
@@ -25,13 +29,18 @@ class chase_node_class(Node):
     def __init__(self):
         super().__init__('chase_node')
 
-        # self.use_sim_time = True
         # Declare and get parameters
         self.declare_parameter('nav_graph_file_path', '/home/user/rmf_wakayama-u-farm-123/0.yaml')
         self.declare_parameter('goal_threshold', 0.5)
+        self.declare_parameter('target_threshold', 2.0)
+        self.declare_parameter('target_invade_time_threshold', 10.0)
+        self.declare_parameter('use_sim_time', False)
 
         self.nav_graph_file_path = self.get_parameter('nav_graph_file_path').get_parameter_value().string_value
         self.goal_threshold = self.get_parameter('goal_threshold').get_parameter_value().double_value
+        self.target_threshold = self.get_parameter('target_threshold').get_parameter_value().double_value
+        self.target_invade_time_threshold = self.get_parameter('target_invade_time_threshold').get_parameter_value().double_value
+        self.use_sim_time = self.get_parameter('use_sim_time').get_parameter_value().bool_value
 
         # Validate parameters
         if not os.path.exists(self.nav_graph_file_path):
@@ -40,6 +49,8 @@ class chase_node_class(Node):
         
         self.get_logger().info(f'Using nav graph: {self.nav_graph_file_path}')
         self.get_logger().info(f'Goal threshold: {self.goal_threshold}m')
+        self.get_logger().info(f'Target threshold: {self.target_threshold}m')
+        self.get_logger().info(f'Target invade time threshold: {self.target_invade_time_threshold}s')
 
         self.transient_qos = QoSProfile(
             history=History.KEEP_LAST,
@@ -82,9 +93,70 @@ class chase_node_class(Node):
         self.vertices_dict = {vertex[2]['name']: [vertex[0], vertex[1]] for vertex in nav_graph_data['levels'][self.level_name]['vertices']}
         self.vertices_list = list(self.vertices_dict.items())
 
-        self.target_position = None
+        self.target_position = [None, None]
+        self.chase_zone = Polygon([
+            (0.0, 0.0),
+            (0.0, -10.0),
+            (10.0, -10.0),
+            (10.0, 0.0)
+        ])
+        states = ['standby', 'chasing', 'cancelling']
+        transitions = [
+            {'trigger': 'start_new_chase', 'source': 'standby',    'dest': 'chasing',   'conditions': 'is_target_available'},
+            {'trigger': 'cancel_chase',    'source': 'chasing',    'dest': 'cancelling','conditions': 'is_target_moved_threshold'},
+            {'trigger': 'resume_chase',    'source': 'cancelling', 'dest': 'chasing',   'conditions': 'is_target_moved_away'},
+            {'trigger': 'stop_chase',      'source': 'cancelling', 'dest': 'standby',   'conditions': 'is_target_unavailable'},
+        ]
+        self.machine = Machine(model=self, states=states, transitions=transitions, initial='standby')
 
         self.first_task_sent = False
+#-----------------------------------------------------------------------------------#
+    def is_target_available(self):
+        if self.target_position[0] is not None:
+            if self.chase_zone.contains(Point(self.target_position[0])):# todo: add target invade time duration threshold condition
+                self.target_position[1] = self.target_position[0]
+                self.target_position[0] = None
+                return True
+
+        return False
+
+    def is_target_moved_threshold(self):
+        if self.target_position[0] is not None:
+            if np.linalg.norm(np.array(self.target_position[0]) - np.array(self.target_position[1])) >= self.target_threshold:
+                self.target_position[1] = self.target_position[0]
+                self.target_position[0] = None
+                return True
+
+        return False
+            
+
+    def is_target_moved_away(self):
+        if self.target_position[0] is not None:
+            if self.chase_zone.contains(Point(self.target_position[0])):
+                self.target_position[1] = self.target_position[0]
+                self.target_position[0] = None
+                return True
+
+        return False
+
+    def is_target_unavailable(self):
+        if self.target_position[0] is not None:
+            if not self.chase_zone.contains(Point(self.target_position[0])):
+                self.target_position[1] = None
+                self.target_position[0] = None
+                return True
+
+        return False
+
+#-----------------------------------------------------------------------------------#
+    def on_enter_chasing(self):
+        self.get_logger().info('Entering chasing state')
+    
+    def on_enter_cancelling(self):
+        self.get_logger().info('Entering cancelling state')
+    
+    def on_enter_standby(self):
+        self.get_logger().info('Entering standby state')
 #-----------------------------------------------------------------------------------#
     def fleet_state_callback(self, msg):# troble: sometime the fleet state msg will miss some robots' info, which will cause the node to think the robot is free and assign task to it, but in reality it's still on going task, which will cause the task can never be completed and never be removed from ongoing task list, and the robot will never be free again. A possible solution is to check the robot's position and compare with the goal position of its assigned task, if the distance is less than a threshold, consider the task is complete and remove it from ongoing task list, otherwise consider it's still on going task and should not be added to free robot list. This solution is implemented in the following code.
         for item in msg.robots:
@@ -117,7 +189,7 @@ class chase_node_class(Node):
                     self.free_robot_list.append(item)
 #-----------------------------------------------------------------------------------#
     def get_target_callback(self, msg):
-        self.target_position = [msg.pose.position.x, msg.pose.position.y]
+        self.target_position[0] = [msg.pose.position.x, msg.pose.position.y]
         self.get_logger().info('target: ' + str(self.target_position))
 #-----------------------------------------------------------------------------------#
     def timer_callback(self):
@@ -136,13 +208,23 @@ class chase_node_class(Node):
                 self.get_logger().info(f"{task}")
         self.get_logger().info('----------------------------------')
 
-        if self.target_position != None: # async process chasing target
+        if self.state == 'standby':
+            self.start_new_chase()      # conditions: is_target_available
+
+        elif self.state == 'chasing':
+            self.cancel_chase()         # conditions: is_target_moved_threshold
+
+        elif self.state == 'cancelling':
+            self.resume_chase()         # conditions: is_target_moved_away
+            self.stop_chase()           # conditions: is_target_unavailable
+
+        if self.target_position[0] != None: # async process chasing target
             if len(self.ongoing_task_dic) == 0:
                 self.get_logger().info('get it!')
 
                 names = list(self.vertices_dict.keys()) #find closest two waypoints to target
                 coordinates = np.array(list(self.vertices_dict.values()))
-                squared_distances = np.sum((coordinates - np.array(self.target_position)) ** 2, axis=1)
+                squared_distances = np.sum((coordinates - np.array(self.target_position[0])) ** 2, axis=1)
                 # min_index = np.argmin(squared_distances)
                 sorted_indices = np.argsort(squared_distances)
 
@@ -167,7 +249,7 @@ class chase_node_class(Node):
                             rounds = 1,
                             starttime = 0)
 
-                self.target_position = None
+                self.target_position[0] = None
             else:
                 if len(self.cancelling_task_dic) != len(self.ongoing_task_dic):
                     self.get_logger().info("cancel on going task\n")
@@ -176,10 +258,10 @@ class chase_node_class(Node):
 #-----------------------------------------------------------------------------------#
     def chase_task_requester(self, robot, fleet, starttime, places, rounds):
         # enable ros sim time
-        # if self.use_sim_time:
-        #     self.get_logger().info("Using Sim Time")
-        #     param = Parameter("use_sim_time", Parameter.Type.BOOL, True)
-        #     self.set_parameters([param])
+        if self.use_sim_time:
+            self.get_logger().info("Using Sim Time")
+            param = Parameter("use_sim_time", Parameter.Type.BOOL, True)
+            self.set_parameters([param])
 
         # Construct task
         msg = ApiRequest()
@@ -239,7 +321,6 @@ class chase_node_class(Node):
 
         self.cancelling_task_dic[task_id] = str(msg.request_id)
 #-----------------------------------------------------------------------------------#
-    
     def receive_response(self, response_msg: ApiResponse):
         print(f'Got response:\n{response_msg}')
         if self.first_task_sent: #to prevent unwanted msg
@@ -255,7 +336,6 @@ class chase_node_class(Node):
                 del self.cancelling_task_dic[task_id_to_delete[0]]
                 print("cancel task complete\n")
  #-----------------------------------------------------------------------------------#       
-
 def main(argv=sys.argv):
     rclpy.init(args=sys.argv)
 
