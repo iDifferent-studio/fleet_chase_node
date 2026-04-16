@@ -54,7 +54,7 @@ class chase_node_class(Node):
 
         self.transient_qos = QoSProfile(
             history=History.KEEP_LAST,
-            depth=1,
+            depth=10,
             reliability=Reliability.RELIABLE,
             durability=Durability.TRANSIENT_LOCAL)
  
@@ -118,12 +118,13 @@ class chase_node_class(Node):
         self.first_task_sent = False
 #-----------------------------------------------------------------------------------#
     def standby_to_chasing_conditions(self):
-        if self.target_position[0] is not None:
-            if self.chase_zone.contains(Point(self.target_position[0])):# todo: add target invade time duration threshold condition
-                self.get_logger().warn('target invade chase zone, start chasing')
-                self.target_position[1] = self.target_position[0]
-                self.target_position[0] = None
-                return True
+        if len(self.cancelling_task_dic) == 0:
+            if self.target_position[0] is not None:
+                if self.chase_zone.contains(Point(self.target_position[0])):# todo: add target invade time duration threshold condition
+                    self.get_logger().warn('target invade chase zone, start chasing')
+                    self.target_position[1] = self.target_position[0]
+                    self.target_position[0] = None
+                    return True
 
         return False
 
@@ -140,12 +141,13 @@ class chase_node_class(Node):
             
 
     def cancelling_to_chasing_conditions(self):
-        if self.target_position[0] is not None:
-            if self.chase_zone.contains(Point(self.target_position[0])):
-                self.get_logger().warn('target still in chase zone')
-                self.target_position[1] = self.target_position[0]
-                self.target_position[0] = None
-                return True
+        if len(self.cancelling_task_dic) == 0:
+            if self.target_position[0] is not None:
+                if self.chase_zone.contains(Point(self.target_position[0])):
+                    self.get_logger().warn('target still in chase zone')
+                    self.target_position[1] = self.target_position[0]
+                    self.target_position[0] = None
+                    return True
 
         return False
 
@@ -206,9 +208,18 @@ class chase_node_class(Node):
         self.get_logger().info('----Entering standby state----')
         self.get_logger().info('----------------------------------')
 #-----------------------------------------------------------------------------------#
-    def fleet_state_callback(self, msg):# troble: sometime the fleet state msg will miss some robots' info, which will cause the node to think the robot is free and assign task to it, but in reality it's still on going task, which will cause the task can never be completed and never be removed from ongoing task list, and the robot will never be free again. A possible solution is to check the robot's position and compare with the goal position of its assigned task, if the distance is less than a threshold, consider the task is complete and remove it from ongoing task list, otherwise consider it's still on going task and should not be added to free robot list. This solution is implemented in the following code.
+    def fleet_state_callback(self, msg):
+        # troble: sometime the fleet state msg will miss some robots' info, which 
+        # will cause the node to think the robot is free and assign task to it, 
+        # but in reality it's still on going task, which will cause the task can never 
+        # be completed and never be removed from ongoing task list, and the robot 
+        # will never be free again. A possible solution is to check the robot's position 
+        # and compare with the goal position of its assigned task, if the distance is 
+        # less than a threshold, consider the task is complete and remove it from ongoing 
+        # task list, otherwise consider it's still on going task and should not be added to 
+        # free robot list. This solution is implemented in the following code.
         for item in msg.robots:
-            self.get_logger().info(f"get robot msg: {item.name}")
+            #self.get_logger().info(f"get robot msg: {item.name}")
             exists = any(item.name == obj.name for obj in self.free_robot_list)
             if len(self.ongoing_task_dic) != 0: 
                 robot_position = np.array([item.location.x,item.location.y])
