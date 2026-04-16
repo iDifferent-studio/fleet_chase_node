@@ -18,6 +18,7 @@ from rmf_fleet_msgs.msg import FleetState
 
 import random
 from geometry_msgs.msg import PoseStamped
+from visualization_msgs.msg import MarkerArray
 
 from shapely.geometry import Polygon, Point
 from transitions import Machine
@@ -63,10 +64,15 @@ class chase_node_class(Node):
             'fleet_states',
             self.fleet_state_callback,
             10)
-        self.get_target_subscription = self.create_subscription(
+        self.get_debug_target_subscription = self.create_subscription(
             PoseStamped,
             'goal_pose',
-            self.get_target_callback,
+            self.get_debug_target_callback,
+            10)
+        self.get_mmw_target_subscription = self.create_subscription(
+            MarkerArray,
+            'tracker_marker_array',
+            self.get_mmw_target_callback,
             10)
         self.task_res_subscription = self.create_subscription(
             ApiResponse, 
@@ -247,9 +253,16 @@ class chase_node_class(Node):
                 if not exists: # new robot available, add to free robot list
                     self.free_robot_list.append(item)
 #-----------------------------------------------------------------------------------#
-    def get_target_callback(self, msg):
+    def get_debug_target_callback(self, msg):
         self.target_position[0] = [msg.pose.position.x, msg.pose.position.y]
         self.get_logger().info('target: ' + str(self.target_position))
+#-----------------------------------------------------------------------------------#
+    def get_mmw_target_callback(self, msg):
+        marker_positions = []
+        for marker in msg.markers:
+            marker_positions.append([marker.pose.position.x, marker.pose.position.y])
+        self.target_position[0] = marker_positions[0]
+        self.get_logger().info('get dummy msg: ' + str(marker_positions[0]))
 #-----------------------------------------------------------------------------------#
     def timer_callback(self):
         self.get_logger().info('fsm state: ' + str(self.state)) # print status
