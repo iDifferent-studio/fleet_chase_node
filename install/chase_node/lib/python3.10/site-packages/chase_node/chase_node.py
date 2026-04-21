@@ -34,7 +34,7 @@ class chase_node_class(Node):
         self.declare_parameter('nav_graph_file_path', '/home/user/rmf_wakayama-u-farm-123/0.yaml')
         self.declare_parameter('goal_threshold', 0.5)
         self.declare_parameter('target_threshold', 2.0)
-        self.declare_parameter('target_invade_time_threshold', 10.0)
+        self.declare_parameter('target_invade_time_threshold', 3.0)
         #self.declare_parameter('use_sim_time', False)
 
         self.nav_graph_file_path = self.get_parameter('nav_graph_file_path').get_parameter_value().string_value
@@ -106,6 +106,7 @@ class chase_node_class(Node):
             (10.0, -10.0),
             (10.0, 0.0)
         ])
+        self.target_invade_time = 0
         states = ['standby', 'chasing', 'cancelling']
         transitions = [
             {'trigger': 'start_new_chase', 'source': 'standby',    'dest': 'chasing',   'conditions': 'standby_to_chasing_conditions'},
@@ -126,11 +127,19 @@ class chase_node_class(Node):
     def standby_to_chasing_conditions(self):
         if len(self.cancelling_task_dic) == 0:
             if self.target_position[0] is not None:
-                if self.chase_zone.contains(Point(self.target_position[0])):# todo: add target invade time duration threshold condition
-                    self.get_logger().warn('target invade chase zone, start chasing')
-                    self.target_position[1] = self.target_position[0]
-                    self.target_position[0] = None
-                    return True
+                self.get_logger().info('target pose is not none')
+                if self.chase_zone.contains(Point(self.target_position[0])):
+                    self.target_invade_time += 1
+                    self.get_logger().info('target invade chase zone, time: ' + str(self.target_invade_time) + 's')
+                    if self.target_invade_time >= self.target_invade_time_threshold:
+                        self.get_logger().warn('target invade chase zone, start chasing')
+                        self.target_position[1] = self.target_position[0]
+                        self.target_invade_time = 0
+                        return True
+                else:
+                    self.target_invade_time = 0    
+
+            self.target_position[0] = None    
 
         return False
 
