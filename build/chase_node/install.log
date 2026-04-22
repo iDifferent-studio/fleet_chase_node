@@ -1,6 +1,8 @@
 /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node/chase_node.py
+/home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node/chase_strategy_core.py
 /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node/__init__.py
 /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node/__pycache__/chase_node.cpython-310.pyc
+/home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node/__pycache__/chase_strategy_core.cpython-310.pyc
 /home/user/chase_ws/install/chase_node/lib/python3.10/site-packages/chase_node/__pycache__/__init__.cpython-310.pyc
 /home/user/chase_ws/install/chase_node/share/ament_index/resource_index/packages/chase_node
 /home/user/chase_ws/install/chase_node/share/chase_node/package.xml

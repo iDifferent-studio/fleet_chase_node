@@ -23,6 +23,8 @@ from visualization_msgs.msg import MarkerArray
 from shapely.geometry import Polygon, Point
 from transitions import Machine
 
+from chase_node.chase_strategy_core import ChaseStrategyCore
+
 ###############################################################################
 
 class chase_node_class(Node):
@@ -88,17 +90,13 @@ class chase_node_class(Node):
 
         self.free_robot_list = []
         self.ongoing_task_dic = {} #{'task_id':{'robot_name','goal_place'},'task_id':{'robot_name','goal_place'}...}
-        # self.pending_task_list = [] #[msg,msg,msg....]
         self.cancelling_task_dic = {} #{'task_id':'cancel_request_id',task_id':'cancel_request_id',task_id':'cancel_request_id'...}
 
         with open(self.nav_graph_file_path, 'r') as file: #openrmf nav graph yaml file path
             nav_graph_data = yaml.safe_load(file)
 
         self.level_name = list(nav_graph_data['levels'].keys())[0]  
-
         self.vertices_dict = {vertex[2]['name']: [vertex[0], vertex[1]] for vertex in nav_graph_data['levels'][self.level_name]['vertices']}
-        self.vertices_list = list(self.vertices_dict.items())
-
         self.target_position = [None, None]
         self.chase_zone = Polygon([
             (0.0, 0.0),
@@ -106,122 +104,22 @@ class chase_node_class(Node):
             (10.0, -10.0),
             (10.0, 0.0)
         ])
-        self.target_invade_time = 0
-        states = ['standby', 'chasing', 'cancelling']
-        transitions = [
-            {'trigger': 'start_new_chase', 'source': 'standby',    'dest': 'chasing',   'conditions': 'standby_to_chasing_conditions'},
-            {'trigger': 'cancel_chase',    'source': 'chasing',    'dest': 'cancelling','conditions': 'chasing_to_cancelling_conditions'},
-            {'trigger': 'resume_chase',    'source': 'cancelling', 'dest': 'chasing',   'conditions': 'cancelling_to_chasing_conditions'},
-            {'trigger': 'stop_chase',      'source': 'cancelling', 'dest': 'standby',   'conditions': 'cancelling_to_standby_conditions'},
-        ]
-        self.machine = Machine(
-            model=self, 
-            states=states, 
-            transitions=transitions, 
-            initial='standby',
-            ignore_invalid_triggers=True
+
+        self.strategy_core = ChaseStrategyCore(
+            logger = self.get_logger,
+            vertices_dict = self.vertices_dict,
+            chase_zone = self.chase_zone,
+            target_threshold = self.target_threshold,
+            target_invade_time_threshold = self.target_invade_time_threshold,
+            free_robot_list = self.free_robot_list,
+            ongoing_task_dic = self.ongoing_task_dic,
+            cancelling_task_dic = self.cancelling_task_dic,
+            target_position = self.target_position,
+            chase_task_requester = self.chase_task_requester,
+            cancel_task_requester = self.cancel_task_requester
         )
 
         self.first_task_sent = False
-#-----------------------------------------------------------------------------------#
-    def standby_to_chasing_conditions(self):
-        if len(self.cancelling_task_dic) == 0:
-            if self.target_position[0] is not None:
-                self.get_logger().info('target pose is not none')
-                if self.chase_zone.contains(Point(self.target_position[0])):
-                    self.target_invade_time += 1
-                    self.get_logger().info('target invade chase zone, time: ' + str(self.target_invade_time) + 's')
-                    if self.target_invade_time >= self.target_invade_time_threshold:
-                        self.get_logger().warn('target invade chase zone, start chasing')
-                        self.target_position[1] = self.target_position[0]
-                        self.target_invade_time = 0
-                        return True
-                else:
-                    self.target_invade_time = 0    
-
-            self.target_position[0] = None    
-
-        return False
-
-    def chasing_to_cancelling_conditions(self):
-        if self.target_position[0] is not None:
-            moved_distance = np.linalg.norm(np.array(self.target_position[0]) - np.array(self.target_position[1]))
-            if moved_distance >= self.target_threshold:
-                self.get_logger().info('target moved, distance: ' + str(moved_distance))
-                #self.target_position[1] = self.target_position[0]
-                #self.target_position[0] = None
-                return True
-
-        return False
-            
-
-    def cancelling_to_chasing_conditions(self):
-        if len(self.cancelling_task_dic) == 0:
-            if self.target_position[0] is not None:
-                if self.chase_zone.contains(Point(self.target_position[0])):
-                    self.get_logger().warn('target still in chase zone')
-                    self.target_position[1] = self.target_position[0]
-                    self.target_position[0] = None
-                    return True
-
-        return False
-
-    def cancelling_to_standby_conditions(self):
-        if self.target_position[0] is not None:
-            if not self.chase_zone.contains(Point(self.target_position[0])):
-                self.get_logger().warn('target out of chase zone')
-                self.target_position[1] = None
-                self.target_position[0] = None
-                return True
-
-        return False
-
-#-----------------------------------------------------------------------------------#
-    def on_enter_chasing(self):
-        self.get_logger().info('----Entering chasing state----')
-        self.get_logger().info('----------------------------------')
-
-        self.get_logger().info('get it!')
-
-        names = list(self.vertices_dict.keys()) #find closest two waypoints to target
-        coordinates = np.array(list(self.vertices_dict.values()))
-        squared_distances = np.sum((coordinates - np.array(self.target_position[1])) ** 2, axis=1)
-        # min_index = np.argmin(squared_distances)
-        sorted_indices = np.argsort(squared_distances)
-
-        closest_robot = [None,None] #find closest robots to the waypoints
-        for i in range(0,2): #only closest two waypoints
-            goal_position = np.array(list(self.vertices_dict[names[sorted_indices[i]]]))
-
-            min_distance = float('inf')
-            for item in self.free_robot_list:
-                if item.name in closest_robot :
-                    continue
-                robot_position = np.array([item.location.x,item.location.y])
-                distance = np.linalg.norm(robot_position - goal_position)
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_robot[i] = item.name
-            if closest_robot[i]:
-                self.chase_task_requester(
-                    fleet = 'agilex_fleet',
-                    robot = closest_robot[i],
-                    places = [names[sorted_indices[i]]],
-                    rounds = 1,
-                    starttime = 0)            
-    
-    def on_enter_cancelling(self):
-        self.get_logger().info('----Entering cancelling state----')
-        self.get_logger().info('----------------------------------')
-
-        if len(self.cancelling_task_dic) != len(self.ongoing_task_dic):
-            self.get_logger().info("cancel on going task\n")
-            for task_id, robot_name in self.ongoing_task_dic.items():
-                self.cancel_task_requester(task_id)
-    
-    def on_enter_standby(self):
-        self.get_logger().info('----Entering standby state----')
-        self.get_logger().info('----------------------------------')
 #-----------------------------------------------------------------------------------#
     def fleet_state_callback(self, msg):
         # troble: sometime the fleet state msg will miss some robots' info, which 
@@ -271,15 +169,15 @@ class chase_node_class(Node):
         for marker in msg.markers:
             marker_positions.append([marker.pose.position.x, marker.pose.position.y])
         self.target_position[0] = marker_positions[0]
-        self.get_logger().info('get dummy msg: ' + str(marker_positions[0]))
+        self.get_logger().info('get mmw msg: ' + str(marker_positions[0]))
 #-----------------------------------------------------------------------------------#
     def timer_callback(self):
-        self.get_logger().info('fsm state: ' + str(self.state)) # print status
+        # self.get_logger().info('fsm state: ' + str(self.state)) # print status
         self.get_logger().info('free list: ') # print status
         for item in self.free_robot_list:
             self.get_logger().info(item.name)
         self.get_logger().info(' ')
-        self.get_logger().info('on goning task: ')
+        self.get_logger().info('on going task: ')
         if len(self.ongoing_task_dic) != 0:
             for task, task_info in self.ongoing_task_dic.items():
                 self.get_logger().info(f"{task}, goal: {task_info['goal_place']}, robot: {task_info['robot_name']}")
@@ -290,48 +188,7 @@ class chase_node_class(Node):
                 self.get_logger().info(f"{task}")
         self.get_logger().info('----------------------------------')
 
-        self.start_new_chase()      # conditions: is_target_available
-        self.cancel_chase()         # conditions: is_target_moved_threshold
-        self.resume_chase()         # conditions: is_target_moved_away
-        self.stop_chase()           # conditions: is_target_unavailable
-
-        # if self.target_position[0] != None: # async process chasing target
-        #     if len(self.ongoing_task_dic) == 0:
-        #         self.get_logger().info('get it!')
-
-        #         names = list(self.vertices_dict.keys()) #find closest two waypoints to target
-        #         coordinates = np.array(list(self.vertices_dict.values()))
-        #         squared_distances = np.sum((coordinates - np.array(self.target_position[0])) ** 2, axis=1)
-        #         # min_index = np.argmin(squared_distances)
-        #         sorted_indices = np.argsort(squared_distances)
-
-        #         closest_robot = [None,None] #find closest robots to the waypoints
-        #         for i in range(0,2): #only closest two waypoints
-        #             goal_position = np.array(list(self.vertices_dict[names[sorted_indices[i]]]))
-
-        #             min_distance = float('inf')
-        #             for item in self.free_robot_list:
-        #                 if item.name in closest_robot :
-        #                     continue
-        #                 robot_position = np.array([item.location.x,item.location.y])
-        #                 distance = np.linalg.norm(robot_position - goal_position)
-        #                 if distance < min_distance:
-        #                     min_distance = distance
-        #                     closest_robot[i] = item.name
-        #             if closest_robot[i]:
-        #                 self.chase_task_requester(
-        #                     fleet = 'agilex_fleet',
-        #                     robot = closest_robot[i],
-        #                     places = [names[sorted_indices[i]]],
-        #                     rounds = 1,
-        #                     starttime = 0)
-
-        #         self.target_position[0] = None
-        #     else:
-        #         if len(self.cancelling_task_dic) != len(self.ongoing_task_dic):
-        #             self.get_logger().info("cancel on going task\n")
-        #             for task_id, robot_name in self.ongoing_task_dic.items():
-        #                 self.cancel_task_requester(task_id)
+        self.strategy_core.strategy_update()
 #-----------------------------------------------------------------------------------#
     def chase_task_requester(self, robot, fleet, starttime, places, rounds):
         # enable ros sim time

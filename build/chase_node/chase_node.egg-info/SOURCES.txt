@@ -10,6 +10,7 @@ setup.py
 ../../build/chase_node/chase_node.egg-info/zip-safe
 chase_node/__init__.py
 chase_node/chase_node.py
+chase_node/chase_strategy_core.py
 resource/chase_node
 test/test_copyright.py
 test/test_flake8.py
