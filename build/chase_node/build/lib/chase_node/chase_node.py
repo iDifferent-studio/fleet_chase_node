@@ -65,7 +65,7 @@ class chase_node_class(Node):
             FleetState,
             'fleet_states',
             self.fleet_state_callback,
-            10)
+            1)
         self.get_debug_target_subscription = self.create_subscription(
             PoseStamped,
             'goal_pose',
@@ -132,7 +132,6 @@ class chase_node_class(Node):
         # task list, otherwise consider it's still on going task and should not be added to 
         # free robot list. This solution is implemented in the following code.
         for item in msg.robots:
-            #self.get_logger().info(f"get robot msg: {item.name}")
             exists = any(item.name == obj.name for obj in self.free_robot_list)
             if len(self.ongoing_task_dic) != 0: 
                 robot_position = np.array([item.location.x,item.location.y])
@@ -141,7 +140,7 @@ class chase_node_class(Node):
                         if task_info['robot_name'] == item.name), None)
 
                 if current_task_id == None:
-                    return
+                    continue
 
                 goal_position = np.array(self.vertices_dict[self.ongoing_task_dic[current_task_id]['goal_place']])
                 distance = np.linalg.norm(robot_position - goal_position)
@@ -158,6 +157,7 @@ class chase_node_class(Node):
                         self.get_logger().info(f"robot {item.name} is on going task {current_task_id}\n")
             else: # no ongoing task, any robot should be in free robot list
                 if not exists: # new robot available, add to free robot list
+                    self.get_logger().info(f"new robot {item.name} is detected")
                     self.free_robot_list.append(item)
 #-----------------------------------------------------------------------------------#
     def get_debug_target_callback(self, msg):
