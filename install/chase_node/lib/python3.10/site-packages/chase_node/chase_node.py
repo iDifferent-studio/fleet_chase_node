@@ -177,7 +177,7 @@ class chase_node_class(Node):
         for item in self.free_robot_list:
             self.get_logger().info(item.name)
         self.get_logger().info(' ')
-        self.get_logger().info('on goning task: ')
+        self.get_logger().info('on going task: ')
         if len(self.ongoing_task_dic) != 0:
             for task, task_info in self.ongoing_task_dic.items():
                 self.get_logger().info(f"{task}, goal: {task_info['goal_place']}, robot: {task_info['robot_name']}")

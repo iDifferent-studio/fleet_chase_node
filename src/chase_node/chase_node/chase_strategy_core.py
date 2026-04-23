@@ -29,9 +29,11 @@ class ChaseStrategyCore:
         self.target_invade_time_threshold = target_invade_time_threshold
 
         self.target_invade_time = 0
-        states = ['standby', 'chasing', 'cancelling']
+        states = ['standby','ambush', 'chasing', 'cancelling']
         transitions = [
-            {'trigger': 'start_new_chase', 'source': 'standby',    'dest': 'chasing',   'conditions': 'standby_to_chasing_conditions'},
+            {'trigger': 'start_ambush',    'source': 'standby',    'dest': 'ambush',    'conditions': 'standby_to_ambush_conditions'},
+            {'trigger': 'back_to_standby', 'source': 'ambush',     'dest': 'standby',   'conditions': 'ambush_to_standby_conditions'},
+            {'trigger': 'start_new_chase', 'source': 'ambush',    'dest': 'chasing',   'conditions': 'ambush_to_chasing_conditions'},
             {'trigger': 'cancel_chase',    'source': 'chasing',    'dest': 'cancelling','conditions': 'chasing_to_cancelling_conditions'},
             {'trigger': 'resume_chase',    'source': 'cancelling', 'dest': 'chasing',   'conditions': 'cancelling_to_chasing_conditions'},
             {'trigger': 'stop_chase',      'source': 'cancelling', 'dest': 'standby',   'conditions': 'cancelling_to_standby_conditions'},
@@ -44,22 +46,45 @@ class ChaseStrategyCore:
             ignore_invalid_triggers=True
         )
 #-----------------------------------------------------------------------------------#
-    def standby_to_chasing_conditions(self):
-        if len(self.cancelling_task_dic) == 0:
-            if self.target_position[0] is not None:
-                self.get_logger().info('target pose is not none')
-                if self.chase_zone.contains(Point(self.target_position[0])):
-                    self.target_invade_time += 1
-                    self.get_logger().info('target invade chase zone, time: ' + str(self.target_invade_time) + 's')
-                    if self.target_invade_time >= self.target_invade_time_threshold:
-                        self.get_logger().warn('target invade chase zone, start chasing')
-                        self.target_position[1] = self.target_position[0]
-                        self.target_invade_time = 0
-                        return True
-                else:
-                    self.target_invade_time = 0    
+    def standby_to_ambush_conditions(self):
+        # if len(self.cancelling_task_dic) == 0:
+        if self.target_position[0] is not None:
+            self.get_logger().info('get target position: ' + str(self.target_position[0]))
+            if self.chase_zone.contains(Point(self.target_position[0])):
+                self.get_logger().info('a target just invade chase zone, start ambush timer')
+                self.target_position[1] = self.target_position[0]
+                self.target_position[0] = None
+                return True    
 
-        self.target_position[0] = None    
+        return False
+
+    def ambush_to_standby_conditions(self):
+        self.get_logger().info('ambush timer: ' + str(self.target_invade_time))
+        if self.target_position[0] is not None:
+            if not self.chase_zone.contains(Point(self.target_position[0])):
+                self.get_logger().warn('target out of chase zone, back to standby')
+                self.target_position[1] = None
+                self.target_position[0] = None
+                self.target_invade_time = 0
+                return True
+
+        if self.target_invade_time >= self.target_invade_time_threshold:
+            self.get_logger().warn('target invade time exceed threshold, back to standby')
+            self.target_position[1] = None
+            self.target_position[0] = None
+            self.target_invade_time = 0
+            return True
+
+        self.target_invade_time += 1
+        return False
+    
+    def ambush_to_chasing_conditions(self):
+        if self.target_position[0] is not None:
+            if self.chase_zone.contains(Point(self.target_position[0])):
+                self.get_logger().warn('target still in chase zone, start chasing')
+                self.target_position[1] = self.target_position[0]
+                self.target_position[0] = None
+                return True
 
         return False
 
@@ -97,6 +122,10 @@ class ChaseStrategyCore:
         return False
 
 #-----------------------------------------------------------------------------------#
+    def on_enter_ambush(self):
+        self.get_logger().info('----Entering ambush state----')
+        self.get_logger().info('----------------------------------')
+
     def on_enter_chasing(self):
         self.get_logger().info('----Entering chasing state----')
         self.get_logger().info('----------------------------------')
@@ -145,6 +174,8 @@ class ChaseStrategyCore:
 
     def strategy_update(self):
         self.get_logger().info('fsm state: ' + str(self.state)) # print status
+        self.start_ambush()         # conditions: a target just invade chase zone
+        self.back_to_standby()      # conditions: target out of chase zone, target invade time exceed threshold
         self.start_new_chase()      # conditions: is_target_available
         self.cancel_chase()         # conditions: is_target_moved_threshold
         self.resume_chase()         # conditions: is_target_moved_away
