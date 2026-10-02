@@ -34,12 +34,14 @@ class chase_node_class(Node):
 
         # Declare and get parameters
         self.declare_parameter('nav_graph_file_path', '/home/user/rmf_wakayama-u-farm-123/0.yaml')
+        self.declare_parameter('boundary_map_file_path', '/home/user/rmf_wakayama-u-farm-123/1.yaml')
         self.declare_parameter('goal_threshold', 0.5)
         self.declare_parameter('target_threshold', 2.0)
         self.declare_parameter('target_invade_time_threshold', 3.0)
         #self.declare_parameter('use_sim_time', False)
 
         self.nav_graph_file_path = self.get_parameter('nav_graph_file_path').get_parameter_value().string_value
+        self.boundary_map_file_path = self.get_parameter('boundary_map_file_path').get_parameter_value().string_value
         self.goal_threshold = self.get_parameter('goal_threshold').get_parameter_value().double_value
         self.target_threshold = self.get_parameter('target_threshold').get_parameter_value().double_value
         self.target_invade_time_threshold = self.get_parameter('target_invade_time_threshold').get_parameter_value().double_value
@@ -49,8 +51,12 @@ class chase_node_class(Node):
         if not os.path.exists(self.nav_graph_file_path):
             self.get_logger().error(f'Nav graph file not found: {self.nav_graph_file_path}')
             raise FileNotFoundError(self.nav_graph_file_path)
+        if not os.path.exists(self.boundary_map_file_path):
+            self.get_logger().error(f'Boundary map file not found: {self.boundary_map_file_path}')
+            raise FileNotFoundError(self.boundary_map_file_path)
         
         self.get_logger().info(f'Using nav graph: {self.nav_graph_file_path}')
+        self.get_logger().info(f'Using boundary map: {self.boundary_map_file_path}')
         self.get_logger().info(f'Goal threshold: {self.goal_threshold}m')
         self.get_logger().info(f'Target threshold: {self.target_threshold}m')
         self.get_logger().info(f'Target invade time threshold: {self.target_invade_time_threshold}s')
@@ -98,12 +104,12 @@ class chase_node_class(Node):
         self.level_name = list(nav_graph_data['levels'].keys())[0]  
         self.vertices_dict = {vertex[2]['name']: [vertex[0], vertex[1]] for vertex in nav_graph_data['levels'][self.level_name]['vertices']}
         self.target_position = [None, None]
-        self.chase_zone = Polygon([
-            (0.0, 0.0),
-            (0.0, -10.0),
-            (10.0, -10.0),
-            (10.0, 0.0)
-        ])
+
+        with open(self.boundary_map_file_path, 'r') as file: #rmf nav graph yaml file describing the chase zone boundary
+            boundary_map_data = yaml.safe_load(file)
+        boundary_level_name = list(boundary_map_data['levels'].keys())[0]
+        boundary_vertices = boundary_map_data['levels'][boundary_level_name]['vertices']
+        self.chase_zone = Polygon([(vertex[0], vertex[1]) for vertex in boundary_vertices])
 
         self.strategy_core = ChaseStrategyCore(
             logger = self.get_logger,
