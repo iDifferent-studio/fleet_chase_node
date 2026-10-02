@@ -55,6 +55,7 @@ class ChaseStrategyCore:
                 self.target_position[1] = self.target_position[0]
                 self.target_position[0] = None
                 return True    
+        self.target_position[0] = None
 
         return False
 
