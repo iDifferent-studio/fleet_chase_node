@@ -109,6 +109,11 @@ class chase_node_class(Node):
             boundary_map_data = yaml.safe_load(file)
         boundary_level_name = list(boundary_map_data['levels'].keys())[0]
         boundary_vertices = boundary_map_data['levels'][boundary_level_name]['vertices']
+        boundary_vertices = sorted(
+            boundary_vertices, 
+            key=lambda vertex: 
+                int(vertex[2]["name"].removeprefix("bnd"))
+        )
         self.chase_zone = Polygon([(vertex[0], vertex[1]) for vertex in boundary_vertices])
 
         self.strategy_core = ChaseStrategyCore(
