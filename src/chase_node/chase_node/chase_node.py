@@ -20,6 +20,10 @@ import random
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import MarkerArray
 
+import tf2_ros
+import tf2_geometry_msgs  # noqa: F401  registers PoseStamped transform support
+from rclpy.duration import Duration
+
 from shapely.geometry import Polygon, Point
 from transitions import Machine
 
@@ -72,6 +76,10 @@ class chase_node_class(Node):
             'fleet_states',
             self.fleet_state_callback,
             10)
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        self.map_frame = 'map'
+
         self.get_debug_target_subscription = self.create_subscription(
             PoseStamped,
             'goal_pose',
@@ -178,7 +186,22 @@ class chase_node_class(Node):
     def get_mmw_target_callback(self, msg):
         marker_positions = []
         for marker in msg.markers:
-            marker_positions.append([marker.pose.position.x, marker.pose.position.y])
+            pose_in = PoseStamped()
+            pose_in.header = marker.header
+            pose_in.pose = marker.pose
+            try:
+                pose_map = self.tf_buffer.transform(
+                    pose_in, self.map_frame, timeout=Duration(seconds=0.2))
+            except (tf2_ros.LookupException,
+                    tf2_ros.ConnectivityException,
+                    tf2_ros.ExtrapolationException) as e:
+                self.get_logger().warn(
+                    f'TF {marker.header.frame_id} -> {self.map_frame} failed: {e}')
+                continue
+            marker_positions.append([pose_map.pose.position.x, pose_map.pose.position.y])
+
+        if not marker_positions:
+            return
         self.target_position[0] = marker_positions[0]
         self.get_logger().info('get mmw msg: ' + str(marker_positions[0]))
 #-----------------------------------------------------------------------------------#
