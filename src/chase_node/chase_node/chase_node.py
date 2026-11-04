@@ -42,6 +42,7 @@ class chase_node_class(Node):
         self.declare_parameter('goal_threshold', 0.5)
         self.declare_parameter('target_threshold', 2.0)
         self.declare_parameter('target_invade_time_threshold', 3.0)
+        self.declare_parameter('robot_exclusion_radius', 2.5)
         #self.declare_parameter('use_sim_time', False)
 
         self.nav_graph_file_path = self.get_parameter('nav_graph_file_path').get_parameter_value().string_value
@@ -49,6 +50,7 @@ class chase_node_class(Node):
         self.goal_threshold = self.get_parameter('goal_threshold').get_parameter_value().double_value
         self.target_threshold = self.get_parameter('target_threshold').get_parameter_value().double_value
         self.target_invade_time_threshold = self.get_parameter('target_invade_time_threshold').get_parameter_value().double_value
+        self.robot_exclusion_radius = self.get_parameter('robot_exclusion_radius').get_parameter_value().double_value
         self.use_sim_time = self.get_parameter('use_sim_time').get_parameter_value().bool_value
 
         # Validate parameters
@@ -139,6 +141,7 @@ class chase_node_class(Node):
         )
 
         self.first_task_sent = False
+        self.robot_positions = {}  # all known robots (free or busy): name -> [x, y]
 #-----------------------------------------------------------------------------------#
     def fleet_state_callback(self, msg):
         # troble: sometime the fleet state msg will miss some robots' info, which 
@@ -150,6 +153,8 @@ class chase_node_class(Node):
         # less than a threshold, consider the task is complete and remove it from ongoing 
         # task list, otherwise consider it's still on going task and should not be added to 
         # free robot list. This solution is implemented in the following code.
+        for item in msg.robots:
+            self.robot_positions[item.name] = [item.location.x, item.location.y]
         for item in msg.robots:
             #self.get_logger().info(f"get robot msg: {item.name}")
             exists = any(item.name == obj.name for obj in self.free_robot_list)
@@ -179,8 +184,22 @@ class chase_node_class(Node):
                 if not exists: # new robot available, add to free robot list
                     self.free_robot_list.append(item)
 #-----------------------------------------------------------------------------------#
+    def is_target_a_robot(self, pos):
+        # detections coinciding with one of our own robots (free or busy) are not targets
+        for name, rp in self.robot_positions.items():
+            distance = np.linalg.norm(np.array(pos) - np.array(rp))
+            if distance < self.robot_exclusion_radius:
+                self.get_logger().info(
+                    f'target {pos} is robot {name} (distance {distance:.2f}m < '
+                    f'{self.robot_exclusion_radius}m), ignored')
+                return True
+        return False
+#-----------------------------------------------------------------------------------#
     def get_debug_target_callback(self, msg):
-        self.target_position[0] = [msg.pose.position.x, msg.pose.position.y]
+        pos = [msg.pose.position.x, msg.pose.position.y]
+        if self.is_target_a_robot(pos):
+            return
+        self.target_position[0] = pos
         self.get_logger().info('target: ' + str(self.target_position))
 #-----------------------------------------------------------------------------------#
     def get_mmw_target_callback(self, msg):
@@ -198,7 +217,10 @@ class chase_node_class(Node):
                 self.get_logger().warn(
                     f'TF {marker.header.frame_id} -> {self.map_frame} failed: {e}')
                 continue
-            marker_positions.append([pose_map.pose.position.x, pose_map.pose.position.y])
+            pos = [pose_map.pose.position.x, pose_map.pose.position.y]
+            if self.is_target_a_robot(pos):
+                continue
+            marker_positions.append(pos)
 
         if not marker_positions:
             return
