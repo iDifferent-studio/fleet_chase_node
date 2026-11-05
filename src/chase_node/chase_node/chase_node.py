@@ -114,6 +114,7 @@ class chase_node_class(Node):
         self.level_name = list(nav_graph_data['levels'].keys())[0]  
         self.vertices_dict = {vertex[2]['name']: [vertex[0], vertex[1]] for vertex in nav_graph_data['levels'][self.level_name]['vertices']}
         self.target_position = [None, None]
+        self.mmw_targets = {} #{target_id: {'pose': [x, y], 'is_chased': bool, 'last_seen': rclpy.time.Time}}
 
         with open(self.boundary_map_file_path, 'r') as file: #rmf nav graph yaml file describing the chase zone boundary
             boundary_map_data = yaml.safe_load(file)
@@ -221,11 +222,15 @@ class chase_node_class(Node):
             if self.is_target_a_robot(pos):
                 continue
             marker_positions.append(pos)
+            target_id = marker.id
+            entry = self.mmw_targets.setdefault(target_id, {'expel': False})
+            entry['pose'] = pos
+            entry['last_seen'] = self.get_clock().now()
 
         if not marker_positions:
             return
         self.target_position[0] = marker_positions[0]
-        self.get_logger().info('get mmw msg: ' + str(marker_positions[0]))
+        # self.get_logger().info('get mmw msg: ' + str(marker_positions[0]))
 #-----------------------------------------------------------------------------------#
     def timer_callback(self):
         # self.get_logger().info('fsm state: ' + str(self.state)) # print status
