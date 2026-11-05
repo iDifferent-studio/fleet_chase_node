@@ -31,3 +31,5 @@ venv/
 # Testing
 .coverage
 htmlcov/
+
+chase_result/*
